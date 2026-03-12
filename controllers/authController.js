@@ -9,11 +9,6 @@ exports.register = async (req, res) => {
 
     const { username, email, password } = req.body;
 
-    // if(!username || !email || !password){
-    //     return res.status(400).json({
-    //         message: "Thiếu thông tin đăng ký"
-    //     });
-    // }
     try {
         //mã hóa password
         //số 10 là độ phức tạp khi mã hóa (salt rounds)
@@ -46,43 +41,43 @@ exports.register = async (req, res) => {
 //=================LOGIN========================
 exports.login = async (req, res) => {
 
-    //lấy username và password từ FE
     const { username, password } = req.body;
 
-    //tìm user theo username
     const sql = "SELECT * FROM users WHERE username = ?";
 
     db.query(sql, [username], async (err, result) => {
 
-        //lỗi dataname
         if (err) {
-            return res.status(500).json(err);
+            console.log("MYSQL ERROR:", err); //khác
+            return res.status(500).json({ error: "Server error" }); //khác
         }
 
-        //nếu không tìm thấy user
         if (result.length === 0) {
             return res.status(401).json({
                 message: "Sai tài khoản hoặc mật khẩu"
             });
         }
 
-        //lấy thông tin user đầu tiên tìm được
         const user = result[0];
 
-        // so sánh password nhập với password đã mã hóa trong DB
+        console.log("User trong DB:", user);
+
         const isMatch = await bcrypt.compare(password, user.password);
 
-        //nếu password không đúng
         if (!isMatch) {
             return res.status(401).json({
                 message: "Sai tài khoản hoặc mật khẩu"
             });
         }
 
-        //nếu password đúng -> đăng nhập thành công
         res.json({
-            message: "Đăng nhập thành công",
-            user: user
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                role: user.role
+            }
         });
+
     });
 };
