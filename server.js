@@ -22,7 +22,10 @@ app.use("/api/subjects", subjectRoutes);
 //Thêm lấy dữ liệu quản lý chương
 const chapterRoutes = require("./routes/chapterRoutes");
 app.use("/api/chapters", chapterRoutes);
+
 // Thêm lấy dữ liệu quản lý bài học theo chương
+const lessonRoutes = require("./routes/lessonRoutes");
+app.use("/api/lessons", lessonRoutes);
 
 //Thêm lấy dữ liệu quản lý câu hỏi
 

@@ -18,25 +18,27 @@ exports.getChapters = (req, res) => {
 };
 
 // POST
-exports.postChapters = (req, res) => {
-    const {subject_id, chapter_number, chapter_name} = req.body;
-    const sql = "INSERT INTO chapters ()"
+exports.postChapter = (req, res) => {
+    const {chapter_name, subject_id, chapter_number} = req.body;
+    const sql = "INSERT INTO chapters (chapter_name, subject_id, chapter_number) VALUES (?,?,?)"
 
-    db.query(sql, [subject_id, chapter_number, chapter_name], (err) => {
+    db.query(sql, [chapter_name, subject_id, chapter_number], (err, result) => {
         if(err) {
+            console.error(err);
             return res.status(500).json(err);
         }
         res.json({message: "Creates"});
+        insertId: result.insertId //?????????
 
     })
 }
 
 // PUT
-exports.putChapters = (req, res) => {
-    const {subject_id, chapter_number, chapter_name} = req.body;
-    const sql = "UPDATE chapters SET ";
+exports.putChapter = (req, res) => {
+    const {chapter_name, subject_id, chapter_number} = req.body;
+    const sql = "UPDATE chapters SET chapter_name=?, subject_id=?, chapter_number=? WHERE chapter_id=?";
 
-    db. query(sql, [subject_id, chapter_number, chapter_name, req.params.id], (err) => {
+    db. query(sql, [chapter_name, subject_id, chapter_number, req.params.id], (err) => {
         if(err) {
             return res.status(500).json(err);
         }
@@ -46,7 +48,7 @@ exports.putChapters = (req, res) => {
 }
 
 // DELETE
-exports.deleteChapters = (req, res) => {
+exports.deleteChapter = (req, res) => {
     const {id} = req.params;
     const sql = "DELETE FROM chapters WHERE chapter_id=?";
 
@@ -54,6 +56,6 @@ exports.deleteChapters = (req, res) => {
         if(err) {
             return res.status(500).json(err);
         }
-        res.json({message: "Xóa thành công"})
+        res.json({message: "Xóa thành công"});
     })
 }

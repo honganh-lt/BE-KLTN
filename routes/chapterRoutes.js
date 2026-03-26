@@ -10,12 +10,12 @@ const chapterControler = require("../controllers/chapterController");
 router.get("/", chapterControler.getChapters);
 
 // POST
-router.post("/", chapterControler.postChapters);
+router.post("/", chapterControler.postChapter);
 
 // PUT
-router.put("/:id", chapterControler.putChapters);
+router.put("/:id", chapterControler.putChapter);
 
 // DELETE
-router.delete("/:id", chapterControler.deleteChapters);
+router.delete("/:id", chapterControler.deleteChapter);
 
 module.exports = router;
