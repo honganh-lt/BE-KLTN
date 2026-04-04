@@ -10,9 +10,10 @@ const authRoutes = require("./routes/authRoutes");
 const db = require("./config/db");   // phải có dòng này
 //thêm đẻ lấy dữ liệu users
 // const authRoutes = require("./routes/authRoutes");
-const userRoutes = require("./routes/userRouters");
+const userRoutes = require("./routes/userRoutes");
 app.use("/api/auth", authRoutes);
 //dữ liệu users
+// const userRoutes = require("./routes/userRouters");
 app.use("/api/users", userRoutes);
 
 //Thêm lấy dữ liệu quản lý môn học
@@ -28,8 +29,14 @@ const lessonRoutes = require("./routes/lessonRoutes");
 app.use("/api/lessons", lessonRoutes);
 
 //Thêm lấy dữ liệu quản lý câu hỏi
+const questionRoutes = require("./routes/questionRoutes")
+app.use("/api/questions", questionRoutes);
 
 //Thêm lấy dữ liệu quản lý đề thi
+const examRoutes = require("./routes/examRoutes");
+app.use("/api/exam", examRoutes);
+
+//Thêm lấy dữ liệu quản lý đề thi user
 
 
 
