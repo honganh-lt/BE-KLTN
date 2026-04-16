@@ -3,15 +3,22 @@ const db = require("../config/db")
 
 //GET
 exports.getLesson = (req, res) => {
-    //Lấy toàn bộ database
-    const sql = "SELECT * FROM lessons";
+    const sql = `
+    SELECT 
+        l.*,                 
+        c.chapter_number,
+        c.chapter_name,      -- ✅ THÊM DÒNG NÀY
+        s.subject_name       
+    FROM lessons l
+    JOIN chapters c ON l.chapter_id = c.chapter_id
+    JOIN subjects s ON c.subject_id = s.subject_id
+    ORDER BY l.lesson_id ASC
+    `;
 
-    //Gửi câu sql lên Mysql
     db.query(sql, (err, result) => {
         if(err) {
             return res.status(500).json({error: "Database error"});
         }
-        //Trả dữ liệu dưới dạng Json
         res.json(result);
     });
 };

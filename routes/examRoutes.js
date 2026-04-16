@@ -9,10 +9,14 @@ const examController = require("../controllers/examController");
 //GET
 router.get("/", examController.getExam);
 
+// 👇 thêm ở đây
+router.get("/:id", examController.getExamDetail);
+
+
 //POST
 // router.post("/", examController.postExam);
 //POST tạo API: tạo đề + random câu hỏi
-router.post('/create-full', examController.createExamWithQuestions);
+router.post('/', examController.createExamWithQuestions);
 
 //PUT
 router.put("/:id", examController.putExam);
