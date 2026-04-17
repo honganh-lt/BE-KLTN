@@ -3,22 +3,27 @@ const db = require("../config/db")
 
 //GET
 exports.getLesson = (req, res) => {
-    const sql = `
+    const { chapter_id } = req.query;
+
+    let sql = `
     SELECT 
         l.*,                 
         c.chapter_number,
-        c.chapter_name,      -- ✅ THÊM DÒNG NÀY
+        c.chapter_name,
         s.subject_name       
     FROM lessons l
     JOIN chapters c ON l.chapter_id = c.chapter_id
     JOIN subjects s ON c.subject_id = s.subject_id
-    ORDER BY l.lesson_id ASC
     `;
 
-    db.query(sql, (err, result) => {
-        if(err) {
-            return res.status(500).json({error: "Database error"});
-        }
+    if (chapter_id) {
+        sql += " WHERE l.chapter_id = ?";
+    }
+
+    sql += " ORDER BY l.lesson_id ASC"; // 👈 chuyển xuống dưới
+
+    db.query(sql, chapter_id ? [chapter_id] : [], (err, result) => {
+        if(err) return res.status(500).json({error: "Database error"});
         res.json(result);
     });
 };
