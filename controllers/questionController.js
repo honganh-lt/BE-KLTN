@@ -2,7 +2,7 @@ const db = require("../config/db");
 
 // ================= GET =================
 exports.getQuestion = (req, res) => {
-    const { lessonId } = req.query; //mới
+    const { lessonId } = req.query;
 
     let sql = `
     SELECT 
@@ -10,6 +10,9 @@ exports.getQuestion = (req, res) => {
         q.content,
         q.difficulty,
         q.lesson_id,
+
+        c.chapter_id,      -- ✅ thêm lí do nút sửa ở quản lý câu hỏi bị sai
+        c.subject_id,      -- ✅ thêm
 
         s.subject_name,
         c.chapter_number,
@@ -30,15 +33,13 @@ exports.getQuestion = (req, res) => {
 
     let params = [];
 
-    // 🔥 THÊM FILTER
-    // if (lessonId) {
-    //     sql += " WHERE q.lesson_id = ?";
-    //     params.push(lessonId);
-    // }
+    // ✅ FIX WHERE (quan trọng)
     if (lessonId) {
-        sql += " AND q.lesson_id = ?";
+        sql += " WHERE q.lesson_id = ?";
         params.push(lessonId);
     }
+
+    sql += " ORDER BY q.question_id ASC, a.answer_id ASC";
 
     db.query(sql, params, (err, result) => {
         if (err) return res.status(500).json(err);
@@ -52,6 +53,9 @@ exports.getQuestion = (req, res) => {
                     content: row.content,
                     difficulty: row.difficulty,
                     lesson_id: row.lesson_id,
+
+                    chapter_id: row.chapter_id,   // ✅ thêm
+                    subject_id: row.subject_id,   // ✅ thêm
 
                     subject_name: row.subject_name,
                     chapter_number: row.chapter_number,
@@ -116,66 +120,78 @@ exports.putQuestion = (req, res) => {
     const { id } = req.params;
     const { content, difficulty, lesson_id, answers } = req.body;
 
-    //nâng cấp
-    db.beginTransaction((err) => {
+    if (!content || !difficulty || !lesson_id) {
+        return res.status(400).json({ message: "Thiếu dữ liệu" });
+    }
+
+    if (!Array.isArray(answers) || answers.length === 0) {
+        return res.status(400).json({ message: "Answers lỗi" });
+    }
+
+    db.beginTransaction(err => {
         if (err) return res.status(500).json(err);
 
         // 1. UPDATE QUESTION
-        const sqlUpdate = `
-            UPDATE questions
-            SET content=?, difficulty=?, lesson_id=?
-            WHERE question_id=?
-        `;
-
-        db.query(sqlUpdate, [content, difficulty, lesson_id, id], (err) => {
-            if (err) {
-                return db.rollback(() => {
-                    res.status(500).json(err);
-                });
-            }
-
-            // 2. DELETE OLD ANSWERS
-            db.query("DELETE FROM answers WHERE question_id=?", [id], (err) => {
+        db.query(
+            "UPDATE questions SET content=?, difficulty=?, lesson_id=? WHERE question_id=?",
+            [content, difficulty, lesson_id, id],
+            (err) => {
                 if (err) {
-                    return db.rollback(() => {
-                        res.status(500).json(err);
-                    });
+                    return db.rollback(() => res.status(500).json(err));
                 }
 
-                // 3. INSERT NEW ANSWERS
-                const sqlInsert = `
-                    INSERT INTO answers (question_id, content, is_correct)
-                    VALUES ?
-                `;
-
-                const answerValues = answers.map(a => [
-                    id,
-                    a.content,
-                    a.is_correct
-                ]);
-
-                db.query(sqlInsert, [answerValues], (err) => {
-                    if (err) {
-                        return db.rollback(() => {
-                            res.status(500).json(err);
-                        });
-                    }
-
-                    // 4. COMMIT SUCCESS
-                    db.commit((err) => {
+                // 2. LẤY ANSWERS CŨ
+                db.query(
+                    "SELECT answer_id FROM answers WHERE question_id=? ORDER BY answer_id ASC",
+                    [id],
+                    async (err, oldAnswers) => {
                         if (err) {
-                            return db.rollback(() => {
-                                res.status(500).json(err);
-                            });
+                            return db.rollback(() => res.status(500).json(err));
                         }
 
-                        res.json({
-                            message: "Cập nhật câu hỏi thành công"
-                        });
-                    });
-                });
-            });
-        });
+                        if (oldAnswers.length !== answers.length) {
+                            return db.rollback(() =>
+                                res.status(400).json({
+                                    message: "Số lượng đáp án không khớp"
+                                })
+                            );
+                        }
+
+                        try {
+                            // 3. UPDATE TỪNG ANSWER
+                            for (let i = 0; i < answers.length; i++) {
+                                await new Promise((resolve, reject) => {
+                                    db.query(
+                                        "UPDATE answers SET content=?, is_correct=? WHERE answer_id=?",
+                                        [
+                                            answers[i].content,
+                                            answers[i].is_correct,
+                                            oldAnswers[i].answer_id
+                                        ],
+                                        (err) => {
+                                            if (err) reject(err);
+                                            else resolve();
+                                        }
+                                    );
+                                });
+                            }
+
+                            // 4. COMMIT
+                            db.commit(err => {
+                                if (err) {
+                                    return db.rollback(() => res.status(500).json(err));
+                                }
+
+                                res.json({ message: "Cập nhật thành công" });
+                            });
+
+                        } catch (error) {
+                            db.rollback(() => res.status(500).json(error));
+                        }
+                    }
+                );
+            }
+        );
     });
 };
 

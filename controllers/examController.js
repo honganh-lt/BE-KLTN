@@ -1,123 +1,265 @@
-// examController.js
 const db = require("../config/db");
+ //Ramdom ở đây:
 
-// ===== GET all exams =====
-exports.getExam = (req, res) => {
-    const sql = "SELECT * FROM exam ORDER BY created_time DESC";
+// ================= GET ALL =================
+exports.getExams = (req, res) => {
+    const sql = `
+        SELECT 
+            e.*,
+            s.subject_name,
+            COUNT(eq.question_id) AS question_count
+        FROM exam e
+        LEFT JOIN subjects s ON e.subject_id = s.subject_id
+        LEFT JOIN exam_questions eq ON e.exam_id = eq.exam_id
+        GROUP BY e.exam_id
+        ORDER BY e.created_time ASC
+    `;
+    //DESC
 
-    db.query(sql, (err, result) => {
+    db.query(sql, (err, rows) => {
         if (err) return res.status(500).json(err);
-        res.json(result);
+        res.json(rows);
     });
 };
-//Lấy full thông tin đề + câu hỏi
+
+
+// ================= GET DETAIL =================
+// exports.getExamDetail = (req, res) => {
+//     const { id } = req.params;
+
+//     const sql = `
+//         SELECT q.*
+//         FROM exam_questions eq
+//         JOIN questions q ON eq.question_id = q.question_id
+//         WHERE eq.exam_id = ?
+//     `;
+//     //  const sql = `
+//     //     SELECT 
+//     //         q.us
+//     //     FROM exam_questions eq
+//     //     JOIN questions q ON eq.question_id = q.question_id
+//     //     WHERE eq.exam_id = ?
+//     // `;
+
+// db.query(sql, [id], (err) => {        
+//     //subject_id, title, description, duration, req.params.id
+//     if (err) return res.status(500).json(err); 
+//     if (err) {
+//             return res.status(500).json(err);
+//         }
+
+//         // trả data mới về FE
+//         res.json({
+//             exam_id: req.params.id,
+//             subject_id,
+//             title,
+//             description,
+//             duration
+//         });
+//     });
+// };
+
 exports.getExamDetail = (req, res) => {
-    const id = req.params.id;
+    const { id } = req.params;
 
     const sql = `
-        SELECT e.title, e.duration,
-               q.question_id, q.content, q.difficulty
-        FROM exam e
-        JOIN exam_questions eq ON e.exam_id = eq.exam_id
+        SELECT 
+            q.question_id,
+            q.content,
+            a.answer_id,
+            a.content AS answer_content,
+            a.is_correct
+        FROM exam_questions eq
         JOIN questions q ON eq.question_id = q.question_id
-        WHERE e.exam_id = ?
+        JOIN answers a ON q.question_id = a.question_id
+        WHERE eq.exam_id = ?
     `;
 
-    db.query(sql, [id], (err, result) => {
+    db.query(sql, [id], (err, rows) => {
         if (err) return res.status(500).json(err);
+
+        // thêm title
+        // const result = {
+        //     title: rows[0]?.title || "",
+        //     questions: []
+        // };
+
+        const result = [];
+
+        rows.forEach(row => {
+            let question = result.find(q => q.question_id === row.question_id);
+
+            if (!question) {
+                question = {
+                    question_id: row.question_id,
+                    content: row.content,
+                    answers: []
+                };
+                result.push(question);
+            }
+
+            question.answers.push({
+                answer_id: row.answer_id,
+                content: row.answer_content,
+                is_correct: row.is_correct
+            });
+        });
+
         res.json(result);
     });
 };
 
-// ===== CREATE exam with optional questions =====
-exports.createExamWithQuestions = (req, res) => {
+
+// ================= CREATE MANUAL =================
+//UpdateExam
+exports.postExam = (req, res) => {
     const {
         title,
-        subject_id,
         description,
         duration,
-        created_by,
-        number_of_questions
+        subject_id,
+        questionIds = []
     } = req.body;
 
-    // 1. Tạo đề thi
-    const insertExamSql = `
-        INSERT INTO exam (title, subject_id, description, duration, created_by)
-        VALUES (?, ?, ?, ?, ?)
+    const sqlExam = `
+        INSERT INTO exam (title, description, duration, subject_id, created_time)
+        VALUES (?, ?, ?, ?, NOW())
     `;
 
-    db.query(insertExamSql, [title, subject_id, description, duration, created_by], (err, examResult) => {
+    db.query(sqlExam, [
+        title,
+        description,
+        duration,
+        subject_id
+    ], (err, result) => {
+
         if (err) return res.status(500).json(err);
 
-        const examId = examResult.insertId;
+        const examId = result.insertId;
 
-        // 2. Random câu hỏi
-        const randomQuestionSql = `
-            SELECT question_id FROM questions
-            ORDER BY RAND()
-            LIMIT ?
+        // if (!questionIds.length) {
+        //     return res.json({
+        //         message: "Tạo exam thành công",
+        //         examId
+        //     });
+        // }
+
+        const values = questionIds.map(id => [examId, id]);
+
+        const sqlQ = `
+            INSERT INTO exam_questions (exam_id, question_id)
+            VALUES ?
         `;
 
-        db.query(randomQuestionSql, [number_of_questions], (err, questions) => {
-            if (err) return res.status(500).json(err);
+        db.query(sqlQ, [values], (err2) => {
+            if (err2) return res.status(500).json(err2);
 
-            if (questions.length === 0) {
-                return res.status(400).json({ message: "Không có câu hỏi" });
-            }
+            res.json({
+                message: "Tạo đề thủ công thành công",
+                examId
+            });
+        });
+    });
+};
 
-            // 3. Insert vào bảng exam_questions
-            const values = questions.map(q => [examId, q.question_id]);
 
-            const insertMappingSql = `
+// ================= RANDOM EXAM =================
+exports.createExamBySubject = (req, res) => {
+    const {
+        subject_id,
+        title,
+        description,
+        duration,
+        total_questions = 20
+    } = req.body;
+
+    // 1. lấy toàn bộ câu hỏi theo môn
+    const sql = `
+        SELECT q.question_id
+        FROM questions q
+        JOIN lessons l ON q.lesson_id = l.lesson_id
+        JOIN chapters c ON l.chapter_id = c.chapter_id
+        WHERE c.subject_id = ?
+    `;
+
+    db.query(sql, [subject_id], (err, questions) => {
+        if (err) return res.status(500).json(err);
+
+        if (!questions.length) {
+            return res.status(400).json({
+                error: "Không có câu hỏi trong môn học này"
+            });
+        }
+
+        // 2. shuffle + lấy random
+        const shuffled = questions.sort(() => Math.random() - 0.5);
+        const selected = shuffled.slice(0, total_questions);
+
+        // 3. tạo exam
+        const sqlExam = `
+            INSERT INTO exam (title, description, duration, subject_id, created_time)
+            VALUES (?, ?, ?, ?, NOW())
+        `;
+
+        db.query(sqlExam, [
+            title,
+            description,
+            duration,
+            subject_id
+        ], (err2, result) => {
+
+            if (err2) return res.status(500).json(err2);
+
+            const examId = result.insertId;
+
+            const values = selected.map(q => [
+                examId,
+                q.question_id
+            ]);
+
+            const sqlInsertQ = `
                 INSERT INTO exam_questions (exam_id, question_id)
                 VALUES ?
             `;
 
-            db.query(insertMappingSql, [values], (err) => {
-                if (err) return res.status(500).json(err);
+            db.query(sqlInsertQ, [values], (err3) => {
+                if (err3) return res.status(500).json(err3);
 
                 res.json({
-                    message: "Tạo đề thành công",
-                    exam_id: examId
+                    message: "Tạo đề random thành công",
+                    examId,
+                    total: selected.length
                 });
             });
         });
     });
 };
 
-// ===== PUT exam =====
+//PUT
 exports.putExam = (req, res) => {
-    const id = req.params.id;
-    const { title, subject_id, description, duration} = req.body;
+    const {subject_id, title, description, duration, } = req.body;
+    const sql = "UPDATE exam SET subject_id=?, title=?, description=?, duration=? WHERE exam_id=?";
 
-    const sql = `
-    UPDATE exam 
-    SET title = ?, subject_id = ?, description = ?, duration = ?
-    WHERE exam_id = ?
-`;
+    db.query(sql, [subject_id, title, description, duration, req.params.id], (err) => {
+        if(err) {
+            return res.status(500).json(err);
+        }
+        res.json({
+        message: "Cập nhật thành công",
+        examId: req.params.id
+        })
+    })
+}
 
-    db.query(sql, [title, subject_id, description, duration, id], (err) => {
-        if (err) return res.status(500).json(err);
-
-        res.json({ message: "Cập nhật thành công" });
-    });
-};
-
-// ===== DELETE exam =====
+// ================= DELETE =================
 exports.deleteExam = (req, res) => {
-    const id = req.params.id;
+    const { id } = req.params;
 
-    // 1. Xóa liên kết trước
-    const deleteMapping = "DELETE FROM exam_questions WHERE exam_id = ?";
-
-    db.query(deleteMapping, [id], (err) => {
+    db.query("DELETE FROM exam_questions WHERE exam_id=?", [id], (err) => {
         if (err) return res.status(500).json(err);
 
-        // 2. Xóa đề
-        const deleteExam = "DELETE FROM exam WHERE exam_id = ?";
-
-        db.query(deleteExam, [id], (err) => {
-            if (err) return res.status(500).json(err);
+        db.query("DELETE FROM exam WHERE exam_id=?", [id], (err2) => {
+            if (err2) return res.status(500).json(err2);
 
             res.json({ message: "Xóa thành công" });
         });

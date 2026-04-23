@@ -9,33 +9,50 @@ exports.register = async (req, res) => {
 
     const { username, email, password } = req.body;
 
-    try {
-        //mã hóa password
-        //số 10 là độ phức tạp khi mã hóa (salt rounds)
+   try {
+        // 🔐 Mã hóa password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        //câu lệnh SQL thêm user vào bảng users
         const sql = "INSERT INTO users (username, email, password) VALUES (?, ?, ?)";
 
-    db.query(sql, [username, email, hashedPassword], (err, result) => {
-        
-        //nếu có lỗi MySql
-        if (err) {
-            console.log("MYSQL ERROR:", err);   // 👈 lỗi thật sẽ hiện ở terminal
-            return res.status(500).json({
-                message: "Lỗi đăng ký",
-                error: err
-            });
-        }
+        db.query(sql, [username, email, hashedPassword], (err, result) => {
 
-        //đăng ký thành công
-        res.json({
-            message: "Đăng ký thành công"
+            // ❌ Nếu có lỗi MySQL
+            if (err) {
+                console.log("MYSQL ERROR:", err);
+
+                // 🔥 Lỗi trùng dữ liệu (UNIQUE)
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(400).json({
+                        message: "Username hoặc email đã tồn tại"
+                    });
+                }
+
+                // 🔥 Lỗi thiếu dữ liệu (NOT NULL)
+                if (err.code === 'ER_BAD_NULL_ERROR') {
+                    return res.status(400).json({
+                        message: "Thiếu dữ liệu bắt buộc"
+                    });
+                }
+
+                // ❌ Lỗi khác
+                return res.status(500).json({
+                    message: "Lỗi server"
+                });
+            }
+
+            // ✅ Thành công
+            return res.status(201).json({
+                message: "Đăng ký thành công"
+            });
         });
-    });
-}catch(error){
-    console.log("Lỗi bcrypt:", error);
-}
+
+    } catch (error) {
+        console.log("Lỗi bcrypt:", error);
+        return res.status(500).json({
+            message: "Lỗi mã hóa password"
+        });
+    }
 };
 
 //=================LOGIN========================
@@ -70,9 +87,10 @@ exports.login = async (req, res) => {
             });
         }
 
+        // ✅ FIX QUAN TRỌNG
         res.json({
             user: {
-                id: user.id,
+                user_id: user.user_id,
                 username: user.username,
                 email: user.email,
                 role: user.role
