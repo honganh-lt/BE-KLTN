@@ -8,7 +8,7 @@ const userController = require("../controllers/userController");
 router.get("/", userController.getUser);
 
 //POST
-// router.post("/", userController.postUser);
+router.post("/", userController.postUser);
 
 //PUT
 router.put("/:id", userController.putUser);

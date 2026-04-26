@@ -14,6 +14,44 @@ exports.getUser = (req,res) => {
     })
 };
 
+//POST
+const bcrypt = require("bcrypt");
+
+exports.postUser = async (req, res) => {
+    console.log("BODY:", req.body);
+
+    const { username, email, password, role } = req.body;
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10); // 🔐 hash
+
+        const sql = `
+            INSERT INTO users (username, email, password, role)
+            VALUES (?, ?, ?, ?)
+        `;
+
+        db.query(sql, [username, email, hashedPassword, role], (err) => {
+            if (err) {
+                console.log("DB ERROR:", err);
+
+                if (err.code === "ER_DUP_ENTRY") {
+                    return res.status(400).json({
+                        message: "Username hoặc email đã tồn tại"
+                    });
+                }
+
+                return res.status(500).json(err);
+            }
+
+            res.json({ message: "Created" });
+        });
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "Lỗi server" });
+    }
+};
+
 //Update User : hay ở FE dùng cổng PUT để lấy từ BE
 // vì trong server.js app.use("/api/users", userRoutes); -thực tế: /api/users/users/:id - nên "/users/:id" là sai mà là "/:id"
 

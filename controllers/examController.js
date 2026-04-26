@@ -64,30 +64,41 @@ exports.getExamDetail = (req, res) => {
 
     const sql = `
         SELECT 
+            e.exam_id,
+            e.title,
+            e.description,
+            e.duration,
             q.question_id,
             q.content,
             a.answer_id,
             a.content AS answer_content,
             a.is_correct
-        FROM exam_questions eq
+        FROM exam e
+        JOIN exam_questions eq ON e.exam_id = eq.exam_id
         JOIN questions q ON eq.question_id = q.question_id
         JOIN answers a ON q.question_id = a.question_id
-        WHERE eq.exam_id = ?
+        WHERE e.exam_id = ?
     `;
 
     db.query(sql, [id], (err, rows) => {
         if (err) return res.status(500).json(err);
 
-        // thêm title
-        // const result = {
-        //     title: rows[0]?.title || "",
-        //     questions: []
-        // };
+        if (!rows.length) {
+            return res.status(404).json({ message: "Không tìm thấy exam" });
+        }
 
-        const result = [];
+        const result = {
+            exam_id: rows[0].exam_id,
+            title: rows[0].title,
+            description: rows[0].description,
+            duration: rows[0].duration,
+            questions: []
+        };
 
         rows.forEach(row => {
-            let question = result.find(q => q.question_id === row.question_id);
+            let question = result.questions.find(
+                q => q.question_id === row.question_id
+            );
 
             if (!question) {
                 question = {
@@ -95,7 +106,7 @@ exports.getExamDetail = (req, res) => {
                     content: row.content,
                     answers: []
                 };
-                result.push(question);
+                result.questions.push(question);
             }
 
             question.answers.push({

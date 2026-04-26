@@ -11,6 +11,7 @@ const subjectController = require("../controllers/subjectController");
 // Tạo API với method GET ; URL: (/)
 // Trong app.js(server.js): app.use("/api/subjects", subjectRoutes);
 // GET /api/subjects
+
 router.get("/", subjectController.getSubjects);
 
 //POST
