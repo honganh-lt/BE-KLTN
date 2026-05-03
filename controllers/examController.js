@@ -180,13 +180,23 @@ exports.createExamBySubject = (req, res) => {
         subject_id,
         title,
         description,
-        duration,
-        total_questions = 20
+        duration
     } = req.body;
 
-    // 1. lấy toàn bộ câu hỏi theo môn
+    const total_questions = 20;
+
+    if (!subject_id || !title || !duration) {
+        return res.status(400).json({
+            error: "Thiếu dữ liệu"
+        });
+    }
+
+    // ================= LẤY DATA =================
     const sql = `
-        SELECT q.question_id
+        SELECT 
+            q.question_id,
+            q.difficulty,
+            c.chapter_id
         FROM questions q
         JOIN lessons l ON q.lesson_id = l.lesson_id
         JOIN chapters c ON l.chapter_id = c.chapter_id
@@ -196,17 +206,71 @@ exports.createExamBySubject = (req, res) => {
     db.query(sql, [subject_id], (err, questions) => {
         if (err) return res.status(500).json(err);
 
-        if (!questions.length) {
+        if (questions.length < total_questions) {
             return res.status(400).json({
-                error: "Không có câu hỏi trong môn học này"
+                error: "Không đủ 20 câu hỏi"
             });
         }
 
-        // 2. shuffle + lấy random
-        const shuffled = questions.sort(() => Math.random() - 0.5);
-        const selected = shuffled.slice(0, total_questions);
+        const shuffle = arr => arr.sort(() => Math.random() - 0.5);
 
-        // 3. tạo exam
+        // ================= 1. CHIA THEO CHAPTER =================
+        const chapterMap = {};
+
+        questions.forEach(q => {
+            if (!chapterMap[q.chapter_id]) {
+                chapterMap[q.chapter_id] = [];
+            }
+            chapterMap[q.chapter_id].push(q);
+        });
+
+        let baseSelected = [];
+
+        // lấy mỗi chapter 1 câu (nếu có)
+        Object.values(chapterMap).forEach(list => {
+            if (baseSelected.length < total_questions) {
+                baseSelected.push(shuffle([...list])[0]);
+            }
+        });
+
+        // fill thêm cho đủ 20
+        const remaining = questions.filter(q =>
+            !baseSelected.some(b => b.question_id === q.question_id)
+        );
+
+        baseSelected = [
+            ...baseSelected,
+            ...shuffle(remaining).slice(0, total_questions - baseSelected.length)
+        ];
+
+        // ================= 2. CHIA ĐỘ KHÓ 50-30-20 =================
+        const easyList = baseSelected.filter(q => q.difficulty === "easy");
+        const mediumList = baseSelected.filter(q => q.difficulty === "medium");
+        const hardList = baseSelected.filter(q => q.difficulty === "hard");
+
+        const easyCount = Math.floor(total_questions * 0.5);
+        const mediumCount = Math.floor(total_questions * 0.3);
+        const hardCount = total_questions - easyCount - mediumCount;
+
+        let finalSelected = [];
+
+        if (
+            easyList.length >= easyCount &&
+            mediumList.length >= mediumCount &&
+            hardList.length >= hardCount
+        ) {
+            finalSelected = [
+                ...shuffle(easyList).slice(0, easyCount),
+                ...shuffle(mediumList).slice(0, mediumCount),
+                ...shuffle(hardList).slice(0, hardCount)
+            ];
+        } else {
+            // fallback: dùng baseSelected
+            console.warn("⚠ fallback do thiếu độ khó");
+            finalSelected = shuffle(baseSelected).slice(0, total_questions);
+        }
+
+        // ================= 3. TẠO EXAM =================
         const sqlExam = `
             INSERT INTO exam (title, description, duration, subject_id, created_time)
             VALUES (?, ?, ?, ?, NOW())
@@ -223,23 +287,29 @@ exports.createExamBySubject = (req, res) => {
 
             const examId = result.insertId;
 
-            const values = selected.map(q => [
+            const values = finalSelected.map(q => [
                 examId,
                 q.question_id
             ]);
 
-            const sqlInsertQ = `
+            const sqlInsert = `
                 INSERT INTO exam_questions (exam_id, question_id)
                 VALUES ?
             `;
 
-            db.query(sqlInsertQ, [values], (err3) => {
+            db.query(sqlInsert, [values], (err3) => {
                 if (err3) return res.status(500).json(err3);
 
                 res.json({
-                    message: "Tạo đề random thành công",
+                    message: "Tạo đề thành công",
                     examId,
-                    total: selected.length
+                    total: finalSelected.length,
+
+                    difficulty: {
+                        easy: finalSelected.filter(q => q.difficulty === "easy").length,
+                        medium: finalSelected.filter(q => q.difficulty === "medium").length,
+                        hard: finalSelected.filter(q => q.difficulty === "hard").length
+                    }
                 });
             });
         });
